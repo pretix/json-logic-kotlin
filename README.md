@@ -2,23 +2,34 @@
 
 This is a pure Kotlin implementation of JsonLogic http://jsonlogic.com rule engine. JsonLogic is documented extensively at [JsonLogic.com](http://jsonlogic.com), including examples of every [supported operation](http://jsonlogic.com/operations.html).
 
+This is a fork of the [implementation done by Advantage FSE](https://github.com/advantagefse/json-logic-kotlin).
+It includes a few differences to the original:
+
+* ``JsonLogic.apply`` returns ``Any?`` instead of ``String``. Therefore, you can work with native objects, e.g. a rule
+  might actually return a boolean or numeric value. We also got rid of all unnecessary conversions to and from strings
+  during evaluation.
+
+* If you use custom operators recursively, the order of evaluation is matched to the JavaScript and Python
+  implementations.
+  
+* JSON parsing is handled by Jackson instead of GSON.
+
+* The official JsonLogic.com test suite is bundled instead of loaded dynamically, making test runs more reliable.
+
 ## Installation
 
 Gradle
 
 ```groovy
-implementation 'eu.pretix:eu.pretix.jsonlogic:0.9.6'
-```
+allprojects {
+  repositories {
+    maven { url 'https://jitpack.io' }
+  }
+}
 
-Maven
-
-```xml
-<dependency>
-  <groupId>eu.pretix</groupId>
-  <artifactId>eu.pretix.jsonlogic</artifactId>
-  <version>0.9.6</version>
-  <type>pom</type>
-</dependency>
+dependencies {
+  implementation 'com.github.pretix:json-logic-kotlin:1.0.0'
+}
 ```
 
 ## Examples
