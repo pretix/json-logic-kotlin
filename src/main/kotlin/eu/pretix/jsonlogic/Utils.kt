@@ -1,15 +1,27 @@
 package eu.pretix.jsonlogic
 
-import com.google.gson.Gson
+import com.fasterxml.jackson.databind.ObjectMapper
 
 internal val String?.parse: Any?
     get() = try {
-        Gson().fromJson(this, Map::class.java)
+        ObjectMapper().readValue(this, HashMap::class.java)
     } catch (e: Exception) {
         try {
-            Gson().fromJson(this, List::class.java)
+            ObjectMapper().readValue(this, ArrayList::class.java)
         } catch (e: Exception) {
-            this
+            try {
+                ObjectMapper().readValue(this, Number::class.java)
+            } catch (e: Exception) {
+                try {
+                    ObjectMapper().readValue(this, Boolean::class.java)
+                } catch (e: Exception) {
+                    try {
+                        ObjectMapper().readValue(this, String::class.java)
+                    } catch (e: Exception) {
+                        this
+                    }
+                }
+            }
         }
     }
 
@@ -56,9 +68,6 @@ internal val List<Any?>.doubleList: List<Double>
         }
     }
 
-internal val String.noSpaces: String
-    get() = replace(" ", "")
-
 internal val String.intValue: Int
     get() = doubleValue.toInt()
 
@@ -68,18 +77,6 @@ internal val String.doubleValue: Double
     } catch (e: NumberFormatException) {
         0.0
     }
-
-internal val Any.asString: Any
-    get() = when {
-        this is String && startsWith("\"") && endsWith("\"") -> this
-        this is String && toDoubleOrNull() != null && !contains(".") -> "\"$this\""
-        this is String && toDoubleOrNull() != null -> this
-        this is String -> "\"$this\""
-        else -> this
-    }
-
-internal val String.unStringify: String
-    get() = replace("\"", "")
 
 internal fun getRecursive(indexes: List<String>, data: List<Any?>): Any? = indexes.getOrNull(0)?.apply {
     val d = data.getOrNull(intValue) as? List<Any?>
