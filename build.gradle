@@ -5,7 +5,7 @@ plugins {
 apply plugin: 'maven-publish'
 apply plugin: 'jacoco'
 
-group 'eu.afse'
+group 'eu.pretix'
 version '0.9.6'
 
 repositories {
@@ -42,7 +42,7 @@ artifacts {
 publishing {
     publications {
         mavenJava(MavenPublication) {
-            artifactId 'eu.afse.jsonlogic'
+            artifactId 'eu.pretix.jsonlogic'
             from components.java
 
             artifact sourcesJar {

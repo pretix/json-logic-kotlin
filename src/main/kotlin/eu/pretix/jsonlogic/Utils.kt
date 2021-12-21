@@ -1,4 +1,4 @@
-package eu.afse.jsonlogic
+package eu.pretix.jsonlogic
 
 import com.google.gson.Gson
 

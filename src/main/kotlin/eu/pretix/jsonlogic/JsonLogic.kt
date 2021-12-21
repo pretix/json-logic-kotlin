@@ -1,4 +1,4 @@
-package eu.afse.jsonlogic
+package eu.pretix.jsonlogic
 
 /**
  * Kotlin native implementation of http://jsonlogic.com/
@@ -15,7 +15,7 @@ class JsonLogic {
      */
     @JvmOverloads
     fun apply(logic: String?, data: String? = null, safe: Boolean = true) =
-        evaluateSafe(logic.parse as? Map<*, *> ?: logic, data.parse, safe).toString()
+        evaluateSafe(logic.parse, data.parse, safe)
 
     /**
      * Apply logic on data and get a result
@@ -26,7 +26,17 @@ class JsonLogic {
      * @return evaluation result
      */
     @JvmOverloads
-    fun apply(logic: Any?, data: Any? = null, safe: Boolean = true) = evaluateSafe(logic, data, safe).toString()
+    fun apply(logic: Any?, data: Any? = null, safe: Boolean = true) = evaluateSafe(logic, data, safe)
+
+    /**
+     * Apply logic on data and get a result
+     *
+     * @param logic the logic
+     * @param data the data
+     * @param safe if true an exception is returned as false else exceptions are thrown
+     * @return evaluation result
+     */
+    fun applyString(logic: String?, data: Any? = null, safe: Boolean = true) = evaluateSafe(logic.parse, data, safe)
 
     /**
      * Add new operations http://jsonlogic.com/add_operation.html
@@ -52,7 +62,11 @@ class JsonLogic {
         val operator = logic.keys.firstOrNull()
         val values = logic[operator]
         return if (customOperations.keys.contains(operator))
-            customOperations[operator]?.invoke(values.asList, data)
+            customOperations[operator]?.invoke(when (values) {
+                is List<*> -> values.map { evaluate(it, data) }
+                is Map<*, *> -> evaluate(values, data)
+                else -> evaluate(listOf(values), data)
+            }.asList, data)
         else if (specialArrayOperations.keys.contains(operator))
             specialArrayOperations[operator]?.invoke(values.asList, data)
         else (operations[operator] ?: TODO("operator \"$operator\"")).invoke(when (values) {
@@ -66,8 +80,8 @@ class JsonLogic {
 
     private val operations = mapOf<String, (List<Any?>?, Any?) -> Any?>(
         "var" to { l, d -> getVar(d, l) },
-        "missing" to { l, d -> missing(d, l).toString().noSpaces },
-        "missing_some" to { l, d -> missingSome(d, l).toString().noSpaces },
+        "missing" to { l, d -> missing(d, l) },
+        "missing_some" to { l, d -> missingSome(d, l) },
         "==" to { l, _ -> with(l?.comparableList) { compare(this?.getOrNull(0), this?.getOrNull(1)) == 0 } },
         "===" to { l, _ -> with(l?.comparableList) { compareStrict(this?.getOrNull(0), this?.getOrNull(1)) == 0 } },
         "!=" to { l, _ -> with(l?.comparableList) { compare(this?.getOrNull(0), this?.getOrNull(1)) != 0 } },
@@ -85,27 +99,27 @@ class JsonLogic {
         },
         "and" to { l, _ ->
             if (l?.all { it is Boolean } == true) l.all { it.truthy }
-            else (l?.firstOrNull { !it.truthy } ?: l?.last())?.asString
+            else (l?.firstOrNull { !it.truthy } ?: l?.last())
         },
         "or" to { l, _ ->
             if (l?.all { it is Boolean } == true) l.firstOrNull { it.truthy } != null
-            else (l?.firstOrNull { it.truthy } ?: l?.last())?.asString
+            else (l?.firstOrNull { it.truthy } ?: l?.last())
         },
         "?:" to { l, _ -> l?.recursiveIf },
         "if" to { l, _ -> l?.recursiveIf },
         "log" to { l, _ -> l?.getOrNull(0) },
         "in" to { l, _ ->
-            val first = l?.getOrNull(0).toString().unStringify
+            val first = l?.getOrNull(0)
             val second = l?.getOrNull(1)
             when (second) {
-                is String -> second.contains(first)
+                is String -> second.contains(first.toString())
                 is List<*> -> second.contains(first)
                 else -> false
             }
         },
         "cat" to { l, _ ->
             l?.map { if (it is Number && it.toDouble() == it.toInt().toDouble()) it.toInt() else it }
-                ?.joinToString("")?.asString
+                ?.joinToString("")
         },
         "+" to { l, _ -> l?.doubleList?.sum() },
         "*" to { l, _ -> l?.doubleList?.reduce { sum, cur -> sum * cur } },
@@ -119,20 +133,20 @@ class JsonLogic {
             }
         },
         "/" to { l, _ -> with(l?.doubleList ?: listOf()) { this[0] / this[1] } },
-        "min" to { l, _ -> l?.filter { it is Number }?.minBy { (it as Number).toDouble() } },
-        "max" to { l, _ -> l?.filter { it is Number }?.maxBy { (it as Number).toDouble() } },
-        "merge" to { l, _ -> l?.flat.toString().noSpaces },
+        "min" to { l, _ -> l?.filter { it is Number }?.minByOrNull { (it as Number).toDouble() } },
+        "max" to { l, _ -> l?.filter { it is Number }?.maxByOrNull{ (it as Number).toDouble() } },
+        "merge" to { l, _ -> l?.flat },
         "substr" to { l, _ ->
             val str = l?.getOrNull(0).toString()
             val a = l?.getOrNull(1).toString().intValue
             val b = if (l?.size ?: 0 > 2) l?.getOrNull(2).toString().intValue else 0
             when (l?.size) {
-                2 -> if (a > 0) str.substring(a).asString else str.substring(str.length + a).asString
+                2 -> if (a > 0) str.substring(a) else str.substring(str.length + a)
                 3 -> when {
-                    a >= 0 && b > 0 -> str.substring(a, a + b).asString
-                    a >= 0 && b < 0 -> str.substring(a, str.length + b).asString
-                    a < 0 && b < 0 -> str.substring(str.length + a, str.length + b).asString
-                    a < 0 -> str.substring(str.length + a).asString
+                    a >= 0 && b > 0 -> str.substring(a, a + b)
+                    a >= 0 && b < 0 -> str.substring(a, str.length + b)
+                    a < 0 && b < 0 -> str.substring(str.length + a, str.length + b)
+                    a < 0 -> str.substring(str.length + a)
                     else -> null
                 }
                 else -> null
@@ -142,48 +156,51 @@ class JsonLogic {
 
     private val specialArrayOperations = mapOf<String, (List<Any?>?, Any?) -> Any?>(
         "map" to { l, d ->
-            if (d == null) "[]"
+            if (d == null) listOf<Any>()
             else {
-                val data = evaluate(l?.getOrNull(0), d).toString().parse as? List<*>
-                (data?.map { evaluate(l?.getOrNull(1), it) } ?: "[]").toString().noSpaces
+                val data = evaluate(l?.getOrNull(0), d) as? List<*>
+                (data?.map { evaluate(l?.getOrNull(1), it) } ?: listOf<Any>())
             }
         },
         "filter" to { l, d ->
-            if (d == null) "[]"
+            if (d == null) listOf<Any>()
             else {
-                val data = evaluate(l?.getOrNull(0), d).toString().parse as? List<*>
+                val data = evaluate(l?.getOrNull(0), d) as? List<*>
                 (data?.filter { evaluate(l?.getOrNull(1), it).truthy }
-                    ?: "[]").toString().noSpaces
+                    ?: listOf<Any>())
             }
         },
         "all" to { l, d ->
             if (d == null) false
             else {
-                val data = evaluate(l?.getOrNull(0), d).toString().parse as? List<*>
-                (data?.all { evaluate(l?.getOrNull(1), it).truthy }
-                    ?: false).toString().noSpaces
+                val data = evaluate(l?.getOrNull(0), d) as? List<*>
+                if (data.isNullOrEmpty()) {
+                    false
+                } else {
+                    data.all { evaluate(l?.getOrNull(1), it).truthy }
+                }
             }
         },
         "none" to { l, d ->
             if (d == null) true
             else {
-                val data = evaluate(l?.getOrNull(0), d).toString().parse as? List<*>
+                val data = evaluate(l?.getOrNull(0), d) as? List<*>
                 (data?.none { evaluate(l?.getOrNull(1), it).truthy }
-                    ?: true).toString().noSpaces
+                    ?: true)
             }
         },
         "some" to { l, d ->
-            if (d == null) "[]"
+            if (d == null) listOf<Any>()
             else {
-                val data = evaluate(l?.getOrNull(0), d).toString().parse as? List<*>
+                val data = evaluate(l?.getOrNull(0), d) as? List<*>
                 (data?.any { evaluate(l?.getOrNull(1), it).truthy }
-                    ?: false).toString().noSpaces
+                    ?: false)
             }
         },
         "reduce" to { l, d ->
             if (d == null) 0.0
             else {
-                val data = evaluate(l?.getOrNull(0), d).toString().parse as? List<Any?>
+                val data = evaluate(l?.getOrNull(0), d) as? List<Any?>
                 val logic = l?.getOrNull(1)
                 val initial: Double = if (l != null && l.size > 2) l.getOrNull(2).toString().doubleValue else 0.0
                 data?.fold(initial) { sum, cur ->
@@ -193,35 +210,35 @@ class JsonLogic {
         }
     )
 
-    private fun getVar(data: Any?, values: Any?): String? {
+    private fun getVar(data: Any?, values: Any?): Any? {
         var value: Any? = data
         val varName = if (values is List<*>) values.getOrNull(0).toString() else values.toString()
         when (value) {
             is List<*> -> {
-                val indexParts = varName.unStringify.split(".")
+                val indexParts = varName.split(".")
                 value = if (indexParts.size == 1) value[indexParts[0].intValue] else getRecursive(indexParts, value)
             }
-            is Map<*, *> -> varName.unStringify.split(".").forEach {
+            is Map<*, *> -> varName.split(".").forEach {
                 value = (value as? Map<*, *>)?.get(it)
             }
         }
         if ((value == data || value == null) && values is List<*> && values.size > 1) {
-            return values.getOrNull(1)?.asString.toString()
+            return values.getOrNull(1)
         }
-        return value?.asString.toString()
+        return value
     }
 
     private val List<Any?>.recursiveIf: Any?
         get() = when (size) {
             0 -> null
-            1 -> getOrNull(0)?.asString
-            2 -> if (getOrNull(0).truthy) getOrNull(1)?.asString else null
-            3 -> if (getOrNull(0).truthy) getOrNull(1)?.asString else getOrNull(2)?.asString
-            else -> if (getOrNull(0).truthy) getOrNull(1)?.asString else subList(2, size).recursiveIf
+            1 -> getOrNull(0)
+            2 -> if (getOrNull(0).truthy) getOrNull(1) else null
+            3 -> if (getOrNull(0).truthy) getOrNull(1) else getOrNull(2)
+            else -> if (getOrNull(0).truthy) getOrNull(1) else subList(2, size).recursiveIf
         }
 
     private fun missing(data: Any?, vars: List<Any?>?) = arrayListOf<Any?>().apply {
-        vars?.forEach { if (getVar(data, it) == "null") add(it?.asString) }
+        vars?.forEach { if (getVar(data, it) == null) add(it) }
     }
 
     private fun missingSome(data: Any?, vars: List<Any?>?): List<Any?> {
@@ -235,14 +252,14 @@ class JsonLogic {
         a is Number && b is Number -> compareValues(a.toDouble(), b.toDouble())
         a is String && b is Number -> compareValues(a.doubleValue, b.toDouble())
         a is Number && b is String -> compareValues(a.toDouble(), b.doubleValue)
-        a is String && b is String -> compareValues(a.toString().unStringify, b.toString().unStringify)
+        a is String && b is String -> compareValues(a, b)
         a is Boolean || b is Boolean -> compareValues(a.truthy, b.truthy)
         else -> compareValues(a, b)
     }
 
     private fun compareStrict(a: Comparable<*>?, b: Comparable<*>?) = when {
         a is Number && b is Number -> compareValues(a.toDouble(), b.toDouble())
-        a is String && b is String -> compareValues(a.unStringify, b.unStringify)
+        a is String && b is String -> compareValues(a, b)
         else -> -1
     }
 
